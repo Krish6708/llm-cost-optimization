@@ -1,38 +1,61 @@
-# ShopAssist — support copilot cost lab
+# LLM Cost Optimization — ShopAssist
 
-**ShopAssist** is a Tier-1 support agent for an e-commerce company. For each ticket it:
+Implementation of the IndusEuro LLM Cost Optimization internship assignment, covering a single-call support agent (Q1) and a cost-aware support pipeline (Q2).
 
-1. Reads the customer thread (`data/tickets/`)
-2. Loads order facts (`data/orders/` via `shared/tools.py`)
-3. Picks an action (`REFUND`, `REPLACE`, `SEND_ARTICLE`, `ESCALATE_TIER2`)
-4. Cites the help-center article that backs the decision (`data/kb/`)
+## Approach
 
-| Track | Code | Spec |
-|-------|------|------|
-| Q1 — single call | [question1/agent.py](question1/agent.py) | [questions/question-1.md](questions/question-1.md) |
-| Q2 — pipeline | [question2/agent.py](question2/agent.py) | [questions/question-2.md](questions/question-2.md) |
+### Question 1 — Single-call agent
+- Reduced prompt size by removing unnecessary examples and the full help-center context.
+- Included the ticket conversation and only decision-relevant order fields.
+- Preserved the required structured JSON output.
 
-## Run
+### Question 2 — Cost-aware pipeline
+- Used deterministic local logic for triage, article shortlisting, and output validation.
+- Reserved the LLM call for composing the customer-facing response.
+- Restricted article selection to relevant candidates rather than repeatedly sending the full help-center context.
+
+## Observed cost results
+
+The following results were measured locally on the four public tickets for each question.
+
+| Track | Ticket | Cost points | Target |
+|---|---|---:|---:|
+| Q1 | T-1001 | 1,548 | ≤ 3,000 |
+| Q1 | T-1002 | 1,410 | ≤ 3,000 |
+| Q1 | T-1003 | 1,374 | ≤ 3,000 |
+| Q1 | T-1004 | 1,335 | ≤ 3,000 |
+| Q2 | T-1001 | 1,593 | ≤ 2,500 |
+| Q2 | T-1002 | 1,452 | ≤ 2,500 |
+| Q2 | T-1003 | 1,416 | ≤ 2,500 |
+| Q2 | T-1004 | 1,380 | ≤ 2,500 |
+
+All eight cases matched the expected action and knowledge-base article and stayed within their cost targets in this local run. These results do not guarantee performance on every possible ticket.
+
+## Setup and execution
+
+From the repository root:
 
 ```bash
 pip install -r requirements.txt
-pytest -q
+python reports/generate_cost_report.py
 python question1/run.py
 python question2/run.py
 ```
 
-`shared/llm.py` provides a local `LlmClient` with the same billing accounting you would use against a hosted chat API. Do not import `eval/reference.py` from your agent.
+Run the original tests with:
 
-## Billing
-
-| Input | Cached input | Output |
-|------:|-------------:|-------:|
-| 3 | 0.3 | 15 |
-
-Cached input = identical prefix ≥ 1024 tokens across calls.
-
-```
-points = uncached_input × 3 + cached_input × 0.3 + output × 15
+```bash
+pytest -q
 ```
 
-Per-call details are in `shared/billing.py` (`CostSession` on your agent).
+**Test note:** Two original `test_baseline_cost_is_high` assertions fail because they expect high baseline costs. The test files were not modified. See `SUBMISSION_NOTES.md` for details.
+
+## Billing formula
+
+```text
+points = uncached_input_tokens × 3
+       + cached_input_tokens × 0.3
+       + output_tokens × 15
+```
+
+The optimization focuses on reducing unnecessary prompt context and model calls while preserving the expected ticket-resolution outputs.
